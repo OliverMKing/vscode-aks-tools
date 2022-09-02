@@ -68,7 +68,15 @@ export async function aksKubectlGetNodeCommands(
   target: any
 ): Promise<void> {
   const command = `get node`;
-  await aksKubectlCommands(_context, target, command, getBasicWebviewContent);
+  await aksKubectlCommands(_context,
+    target,
+    command,
+    getGridWebviewGetter([
+      {jsonPath: "$.items[*].metadata.name", name: "Name"},
+      {jsonPath: "$.items[*].status.conditions[-1:].type", name: "Status"},
+      {jsonPath: "$.items[*].status.nodeInfo.kubeletVersion", name: "Version"},
+    ])
+  );
 }
 
 export async function aksKubectlDescribeServicesCommands(

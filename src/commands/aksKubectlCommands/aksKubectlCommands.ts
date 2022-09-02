@@ -1,6 +1,8 @@
 import * as vscode from "vscode";
 import * as k8s from "vscode-kubernetes-tools-api";
 import { IActionContext } from "@microsoft/vscode-azext-utils";
+import { JSONPath } from "jsonpath-plus";
+import stripAnsi from 'strip-ansi';
 import { getAksClusterTreeItem } from "../utils/clusters";
 import { getExtensionPath, longRunning } from "../utils/host";
 import { Errorable, failed } from "../utils/errorable";
@@ -15,12 +17,26 @@ import {
 } from "../utils/webviews";
 import { invokeKubectlCommand } from "../utils/kubectl";
 
+interface IWebviewGetter {
+  (
+    cmdOutput: string,
+    commandRun: string,
+    vscodeExtensionPath: string,
+    webview: vscode.Webview
+  ): string;
+}
+
+interface IColumn {
+  name: string;
+  jsonPath: string;
+}
+
 export async function aksKubectlGetPodsCommands(
   _context: IActionContext,
   target: any
 ): Promise<void> {
   const command = `get pods --all-namespaces`;
-  await aksKubectlCommands(_context, target, command);
+  await aksKubectlCommands(_context, target, command, getBasicWebviewContent);
 }
 
 export async function aksKubectlGetClusterInfoCommands(
@@ -28,7 +44,7 @@ export async function aksKubectlGetClusterInfoCommands(
   target: any
 ): Promise<void> {
   const command = `cluster-info`;
-  await aksKubectlCommands(_context, target, command);
+  await aksKubectlCommands(_context, target, command, getBasicWebviewContent);
 }
 
 export async function aksKubectlGetAPIResourcesCommands(
@@ -36,7 +52,7 @@ export async function aksKubectlGetAPIResourcesCommands(
   target: any
 ): Promise<void> {
   const command = `api-resources`;
-  await aksKubectlCommands(_context, target, command);
+  await aksKubectlCommands(_context, target, command, getBasicWebviewContent);
 }
 
 export async function aksKubectlGetNodeCommands(
@@ -44,7 +60,7 @@ export async function aksKubectlGetNodeCommands(
   target: any
 ): Promise<void> {
   const command = `get node`;
-  await aksKubectlCommands(_context, target, command);
+  await aksKubectlCommands(_context, target, command, getBasicWebviewContent);
 }
 
 export async function aksKubectlDescribeServicesCommands(
@@ -52,13 +68,14 @@ export async function aksKubectlDescribeServicesCommands(
   target: any
 ): Promise<void> {
   const command = `describe services`;
-  await aksKubectlCommands(_context, target, command);
+  await aksKubectlCommands(_context, target, command, getBasicWebviewContent);
 }
 
 async function aksKubectlCommands(
   _context: IActionContext,
   target: any,
-  command: string
+  command: string,
+  webviewGetter: IWebviewGetter
 ): Promise<void> {
   const kubectl = await k8s.extension.kubectl.v1;
   const cloudExplorer = await k8s.extension.cloudExplorer.v1;
@@ -86,72 +103,71 @@ async function aksKubectlCommands(
     return undefined;
   }
 
-  await loadKubectlCommandRun(
+  const kubectlresp = await kubectlCommandRun(
     cluster.result,
     extensionPath.result,
     clusterKubeConfig.result,
     command,
     kubectl
   );
+  if (failed(kubectlresp)) {
+    vscode.window.showErrorMessage(kubectlresp.error);
+    return;
+  }
+  const resultoutput = stripAnsi(kubectlresp.result.stdout);
+
+  const clustername = cluster.result.name;
+  const webview = createWebView(
+    "AKS Kubectl Commands",
+    `AKS Kubectl Command view for: ${clustername}`
+  ).webview;
+
+  webview.html = webviewGetter(
+    resultoutput,
+    command,
+    extensionPath.result,
+    webview
+  );
 }
 
-async function loadKubectlCommandRun(
+async function kubectlCommandRun(
   cloudTarget: AksClusterTreeItem,
   extensionPath: string,
   clusterConfig: string,
   command: string,
   kubectl: k8s.APIAvailable<k8s.KubectlV1>
-) {
+): Promise<Errorable<k8s.KubectlV1.ShellResult>> {
   const clustername = cloudTarget.name;
-  await longRunning(`Loading ${clustername} kubectl command run.`, async () => {
-    const kubectlresult = await tmpfile.withOptionalTempFile<
+  return await longRunning(`Loading ${clustername} kubectl command run.`, async () => {
+    return await tmpfile.withOptionalTempFile<
       Errorable<k8s.KubectlV1.ShellResult>
     >(clusterConfig, "YAML", async (kubeConfigFile) => {
       return await invokeKubectlCommand(kubectl, kubeConfigFile, command);
     });
-
-    if (failed(kubectlresult)) {
-      vscode.window.showErrorMessage(kubectlresult.error);
-      return;
-    }
-    const webview = createWebView(
-      "AKS Kubectl Commands",
-      `AKS Kubectl Command view for: ${clustername}`
-    ).webview;
-    webview.html = getWebviewContent(
-      kubectlresult.result,
-      command,
-      extensionPath,
-      webview,
-    );
   });
 }
 
-function getWebviewContent(
-  clusterdata: k8s.KubectlV1.ShellResult,
+function getBasicWebviewContent(
+  cmdOutput: string,
   commandRun: string,
   vscodeExtensionPath: string,
-  webview: vscode.Webview,
+  webview: vscode.Webview
 ): string {
-  const toolkitUri = getNodeModuleUri(
-    webview,
-    vscodeExtensionPath,
-    [
-      "node_modules",
-      "@vscode",
-      "webview-ui-toolkit",
-      "dist",
-      "toolkit.js"
-    ]
-  );
+  const toolkitUri = getNodeModuleUri(webview, vscodeExtensionPath, [
+    "node_modules",
+    "@vscode",
+    "webview-ui-toolkit",
+    "dist",
+    "toolkit.js",
+  ]);
   const templateUri = getResourceUri(
     vscodeExtensionPath,
     "aksKubectlCommand",
-    "akskubectlcommand.html"
+    "akskubectlcommandbasic.html"
   );
   const data = {
     name: commandRun,
-    command: clusterdata.stdout,
+    command: cmdOutput,
     toolkituri: toolkitUri,
   };
 

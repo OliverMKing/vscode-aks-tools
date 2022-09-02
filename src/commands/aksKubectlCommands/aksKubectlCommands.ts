@@ -212,7 +212,7 @@ function getGridWebviewGetter(
     for (let row = 0; row < columns[0]?.length; row++) {
       const rowObj: any = {};
       for (let col = 0; col < columns?.length; col++) {
-        rowObj[cols[col].name] = columns[col][row];
+        rowObj[cols[col].name] = JSON.stringify(columns[col][row]);
       }
       table.push(rowObj);
     }

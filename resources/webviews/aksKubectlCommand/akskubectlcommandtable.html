@@ -11,6 +11,25 @@
     <h2>AKS Kubectl Command Run</h2>
 
     <h3>kubectl {{name}}</h3>
-    <code>{{{breaklines command}}}</code>
+
+    <vscode-data-grid generate-header="default" aria-label="default">
+      <vscode-data-grid-row row-type="header">
+        {{#each headers}}
+        <vscode-data-grid-cell
+          cell-type="columnheader"
+          grid-column="{{inc @index}}"
+        >
+          {{this}}
+        </vscode-data-grid-cell>
+        {{/each}}
+      </vscode-data-grid-row>
+      <vscode-data-grid-row>
+        {{#each table}} {{#each ../headers}}
+        <vscode-data-grid-cell grid-column="{{inc @index}}">
+          {{lookup .. this}}
+        </vscode-data-grid-cell>
+        {{/each}} {{/each}}
+      </vscode-data-grid-row>
+    </vscode-data-grid>
   </body>
 </html>

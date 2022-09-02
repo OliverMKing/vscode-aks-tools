@@ -141,6 +141,10 @@ htmlhandlers.registerHelper("startStopClusterValue", (value: any): string => {
   return "Stop";
 });
 
+htmlhandlers.registerHelper("inc", (value, options) => {
+    return parseInt(value) + 1;
+});
+
 export function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

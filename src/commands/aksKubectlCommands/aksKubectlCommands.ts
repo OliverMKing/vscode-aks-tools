@@ -35,8 +35,16 @@ export async function aksKubectlGetPodsCommands(
   _context: IActionContext,
   target: any
 ): Promise<void> {
-  const command = `get pods --all-namespaces`;
-  await aksKubectlCommands(_context, target, command, getBasicWebviewContent);
+  const command = `get pods --all-namespaces -o json`;
+  await aksKubectlCommands(_context,
+    target,
+    command,
+    getGridWebviewGetter([
+      {jsonPath: "$.items[*].metadata.name", name: "Name"},
+      {jsonPath: "$.items[*].status.containerStatuses[0].state", name: "State"},
+      {jsonPath: "$.items[*].status.containerStatuses[0].restartCount", name: "Restarts"},
+    ])
+  );
 }
 
 export async function aksKubectlGetClusterInfoCommands(
@@ -172,4 +180,50 @@ function getBasicWebviewContent(
   };
 
   return getRenderedContent(templateUri, data);
+}
+
+function getGridWebviewGetter(
+  cols: IColumn[]
+): IWebviewGetter {
+  return (
+    cmdOutput: string,
+    commandRun: string,
+    vscodeExtensionPath: string,
+    webview: vscode.Webview
+  ): string => {
+    const toolkitUri = getNodeModuleUri(webview, vscodeExtensionPath, [
+      "node_modules",
+      "@vscode",
+      "webview-ui-toolkit",
+      "dist",
+      "toolkit.js",
+    ]);
+    const templateUri = getResourceUri(
+      vscodeExtensionPath,
+      "aksKubectlCommand",
+      "akskubectlcommandtable.html"
+    );
+
+    const obj = JSON.parse(cmdOutput);
+    const columns: string[][] = cols.map((col) => {
+      return JSONPath({path: col.jsonPath, json: obj});
+    });
+    const table = [];
+    for (let row = 0; row < columns[0]?.length; row++) {
+      const rowObj: any = {};
+      for (let col = 0; col < columns?.length; col++) {
+        rowObj[cols[col].name] = columns[col][row];
+      }
+      table.push(rowObj);
+    }
+    const tableHeaders = cols.map(col => col.name);
+
+    const data = {
+      name: commandRun,
+      table: table,
+      headers: tableHeaders,
+      toolkituri: toolkitUri,
+    };
+    return getRenderedContent(templateUri, data);
+  };
 }

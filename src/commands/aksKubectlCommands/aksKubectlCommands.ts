@@ -55,7 +55,10 @@ export async function aksKubectlGetPodsCommands(
     command,
     getTableWebviewGetter(
       jsonPathTableGetter([
-        { colGetter: getJsonPathCol("$.items[*].metadata.name"), name: "Name" },
+        {
+          colGetter: getJsonPathCol("$.items[*].metadata.name"),
+          name: "Name",
+        },
         {
           colGetter: getJsonPathCol(
             "$.items[*].status.containerStatuses[0].state"
@@ -230,8 +233,18 @@ function getBasicWebviewContent(
   return getRenderedContent(templateUri, data);
 }
 
+function getJsonPathColWithModifier(
+  jsonPath: string,
+  modifier: (val: string) => string
+): IColGetter {
+  return (cmdOutput: string) => {
+    const cols = getJsonPathCol(jsonPath)(cmdOutput);
+    return cols.map(modifier);
+  };
+}
+
 function getJsonPathCol(jsonPath: string): IColGetter {
-  return (cmdOutput) => {
+  return (cmdOutput: string) => {
     const obj = JSON.parse(cmdOutput);
     return JSONPath({ path: jsonPath, json: obj });
   };

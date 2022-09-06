@@ -35,8 +35,12 @@ interface ITableGetter {
   (cmdOutput: string): ITable;
 }
 
-interface jsonPathCol {
-  jsonPath: string;
+interface IColGetter {
+  (cmdOutput: string): string[];
+}
+
+interface ICol {
+  colGetter: IColGetter;
   name: string;
 }
 
@@ -49,17 +53,23 @@ export async function aksKubectlGetPodsCommands(
     _context,
     target,
     command,
-    getTableWebviewGetter(jsonPathTableGetter([
-      { jsonPath: "$.items[*].metadata.name", name: "Name" },
-      {
-        jsonPath: "$.items[*].status.containerStatuses[0].state",
-        name: "State",
-      },
-      {
-        jsonPath: "$.items[*].status.containerStatuses[0].restartCount",
-        name: "Restarts",
-      },
-    ]))
+    getTableWebviewGetter(
+      jsonPathTableGetter([
+        { colGetter: getJsonPathCol("$.items[*].metadata.name"), name: "Name" },
+        {
+          colGetter: getJsonPathCol(
+            "$.items[*].status.containerStatuses[0].state"
+          ),
+          name: "State",
+        },
+        {
+          colGetter: getJsonPathCol(
+            "$.items[*].status.containerStatuses[0].restartCount"
+          ),
+          name: "Restarts",
+        },
+      ])
+    )
   );
 }
 
@@ -88,14 +98,21 @@ export async function aksKubectlGetNodeCommands(
     _context,
     target,
     command,
-    getTableWebviewGetter(jsonPathTableGetter([
-      { jsonPath: "$.items[*].metadata.name", name: "Name" },
-      { jsonPath: "$.items[*].status.conditions[-1:].type", name: "Status" },
-      {
-        jsonPath: "$.items[*].status.nodeInfo.kubeletVersion",
-        name: "Version",
-      },
-    ]))
+    getTableWebviewGetter(
+      jsonPathTableGetter([
+        { colGetter: getJsonPathCol("$.items[*].metadata.name"), name: "Name" },
+        {
+          colGetter: getJsonPathCol("$.items[*].status.conditions[-1:].type"),
+          name: "Status",
+        },
+        {
+          colGetter: getJsonPathCol(
+            "$.items[*].status.nodeInfo.kubeletVersion"
+          ),
+          name: "Version",
+        },
+      ])
+    )
   );
 }
 
@@ -213,11 +230,17 @@ function getBasicWebviewContent(
   return getRenderedContent(templateUri, data);
 }
 
-function jsonPathTableGetter(cols: jsonPathCol[]): ITableGetter {
-  return (cmdOutput: string): ITable => {
+function getJsonPathCol(jsonPath: string): IColGetter {
+  return (cmdOutput) => {
     const obj = JSON.parse(cmdOutput);
+    return JSONPath({ path: jsonPath, json: obj });
+  };
+}
+
+function jsonPathTableGetter(cols: ICol[]): ITableGetter {
+  return (cmdOutput: string): ITable => {
     const columns: string[][] = cols.map((col) => {
-      return JSONPath({ path: col.jsonPath, json: obj });
+      return col.colGetter(cmdOutput);
     });
     const table: [][] = [];
     for (let row = 0; row < columns[0]?.length; row++) {
@@ -229,7 +252,7 @@ function jsonPathTableGetter(cols: jsonPathCol[]): ITableGetter {
     }
     const headers = cols.map((col) => col.name);
 
-    return {table, headers};
+    return { table, headers };
   };
 }
 
@@ -253,7 +276,7 @@ function getTableWebviewGetter(tableGetter: ITableGetter): IWebviewGetter {
       "akskubectlcommandtable.html"
     );
 
-    const {table, headers} = tableGetter(cmdOutput);
+    const { table, headers } = tableGetter(cmdOutput);
     const data = {
       name: commandRun,
       table,

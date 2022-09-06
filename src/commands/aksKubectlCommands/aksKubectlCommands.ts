@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import * as k8s from "vscode-kubernetes-tools-api";
 import { IActionContext } from "@microsoft/vscode-azext-utils";
 import { JSONPath } from "jsonpath-plus";
-import stripAnsi from 'strip-ansi';
+import stripAnsi from "strip-ansi";
 import { getAksClusterTreeItem } from "../utils/clusters";
 import { getExtensionPath, longRunning } from "../utils/host";
 import { Errorable, failed } from "../utils/errorable";
@@ -28,6 +28,7 @@ interface IWebviewGetter {
 
 interface IColumn {
   name: string;
+  // TODO: Change this from json path to a more flexible column formatter (likely json path on otp of extra functions)
   jsonPath: string;
 }
 
@@ -36,13 +37,20 @@ export async function aksKubectlGetPodsCommands(
   target: any
 ): Promise<void> {
   const command = `get pods --all-namespaces -o json`;
-  await aksKubectlCommands(_context,
+  await aksKubectlCommands(
+    _context,
     target,
     command,
     getGridWebviewGetter([
-      {jsonPath: "$.items[*].metadata.name", name: "Name"},
-      {jsonPath: "$.items[*].status.containerStatuses[0].state", name: "State"},
-      {jsonPath: "$.items[*].status.containerStatuses[0].restartCount", name: "Restarts"},
+      { jsonPath: "$.items[*].metadata.name", name: "Name" },
+      {
+        jsonPath: "$.items[*].status.containerStatuses[0].state",
+        name: "State",
+      },
+      {
+        jsonPath: "$.items[*].status.containerStatuses[0].restartCount",
+        name: "Restarts",
+      },
     ])
   );
 }
@@ -68,13 +76,17 @@ export async function aksKubectlGetNodeCommands(
   target: any
 ): Promise<void> {
   const command = `get node`;
-  await aksKubectlCommands(_context,
+  await aksKubectlCommands(
+    _context,
     target,
     command,
     getGridWebviewGetter([
-      {jsonPath: "$.items[*].metadata.name", name: "Name"},
-      {jsonPath: "$.items[*].status.conditions[-1:].type", name: "Status"},
-      {jsonPath: "$.items[*].status.nodeInfo.kubeletVersion", name: "Version"},
+      { jsonPath: "$.items[*].metadata.name", name: "Name" },
+      { jsonPath: "$.items[*].status.conditions[-1:].type", name: "Status" },
+      {
+        jsonPath: "$.items[*].status.nodeInfo.kubeletVersion",
+        name: "Version",
+      },
     ])
   );
 }
@@ -154,13 +166,16 @@ async function kubectlCommandRun(
   kubectl: k8s.APIAvailable<k8s.KubectlV1>
 ): Promise<Errorable<k8s.KubectlV1.ShellResult>> {
   const clustername = cloudTarget.name;
-  return await longRunning(`Loading ${clustername} kubectl command run.`, async () => {
-    return await tmpfile.withOptionalTempFile<
-      Errorable<k8s.KubectlV1.ShellResult>
-    >(clusterConfig, "YAML", async (kubeConfigFile) => {
-      return await invokeKubectlCommand(kubectl, kubeConfigFile, command);
-    });
-  });
+  return await longRunning(
+    `Loading ${clustername} kubectl command run.`,
+    async () => {
+      return await tmpfile.withOptionalTempFile<
+        Errorable<k8s.KubectlV1.ShellResult>
+      >(clusterConfig, "YAML", async (kubeConfigFile) => {
+        return await invokeKubectlCommand(kubectl, kubeConfigFile, command);
+      });
+    }
+  );
 }
 
 function getBasicWebviewContent(
@@ -190,9 +205,7 @@ function getBasicWebviewContent(
   return getRenderedContent(templateUri, data);
 }
 
-function getGridWebviewGetter(
-  cols: IColumn[]
-): IWebviewGetter {
+function getGridWebviewGetter(cols: IColumn[]): IWebviewGetter {
   return (
     cmdOutput: string,
     commandRun: string,
@@ -214,7 +227,7 @@ function getGridWebviewGetter(
 
     const obj = JSON.parse(cmdOutput);
     const columns: string[][] = cols.map((col) => {
-      return JSONPath({path: col.jsonPath, json: obj});
+      return JSONPath({ path: col.jsonPath, json: obj });
     });
     const table = [];
     for (let row = 0; row < columns[0]?.length; row++) {
@@ -224,7 +237,7 @@ function getGridWebviewGetter(
       }
       table.push(rowObj);
     }
-    const tableHeaders = cols.map(col => col.name);
+    const tableHeaders = cols.map((col) => col.name);
 
     const data = {
       name: commandRun,

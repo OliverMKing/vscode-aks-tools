@@ -60,16 +60,72 @@ export async function aksKubectlGetPodsCommands(
           name: "Name",
         },
         {
-          colGetter: getJsonPathCol(
-            "$.items[*].status.containerStatuses[0].state"
+          name: "Ready",
+          colGetter: getJsonPathColWithModifier(
+            "$.items[*].status.containerStatuses",
+            (val) => {
+              const objs: any[] = JSON.parse(JSON.stringify(val));
+              const readyCount = objs.reduce((acc, obj) => {
+                if (obj?.ready) acc++;
+
+                return acc;
+              }, 0);
+
+              return `${readyCount}/${objs.length}`;
+            }
           ),
-          name: "State",
+        },
+        {
+          name: "Status",
+          colGetter: getJsonPathColWithModifier(
+            "$.items[*].status.containerStatuses",
+            (val) => {
+              const objs: any[] = JSON.parse(JSON.stringify(val));
+              let state = "Running";
+              for (const obj of objs) {
+                if (obj?.state?.running) continue;
+
+                const reason = obj?.state?.waiting?.reason;
+                if (reason) state = reason;
+              }
+
+              return state;
+            }
+          ),
         },
         {
           colGetter: getJsonPathCol(
             "$.items[*].status.containerStatuses[0].restartCount"
           ),
           name: "Restarts",
+        },
+        {
+          colGetter: getJsonPathColWithModifier(
+            "$.items[*].status.containerStatuses[0].state",
+            (val) => {
+              const obj = JSON.parse(JSON.stringify(val));
+              const started = obj?.running?.startedAt;
+              if (started) {
+                // TODO: this should all be switched to a helper library later on
+                // this is just a proof of concept
+                const date = Date.parse(started);
+                const now = Date.now();
+                const days = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+                if (days > 0) return `${days} day${days > 1 ? "s" : ""}`;
+
+                const hours = Math.floor((now - date) / (1000 * 60 * 60));
+                if (hours > 0) return `${hours} hour${hours > 1 ? "s" : ""}`;
+
+                const minutes = Math.floor((now - date) / (1000 * 60));
+                if (minutes > 0) {
+                  return `${minutes} minute${minutes > 1 ? "s" : ""}`;
+                }
+              }
+
+              return "0d";
+            }
+          ),
+          name: "Age",
         },
       ])
     )

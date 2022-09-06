@@ -26,10 +26,18 @@ interface IWebviewGetter {
   ): string;
 }
 
-interface IColumn {
-  name: string;
-  // TODO: Change this from json path to a more flexible column formatter (likely json path on otp of extra functions)
+interface ITable {
+  table: string[][];
+  headers: string[];
+}
+
+interface ITableGetter {
+  (cmdOutput: string): ITable;
+}
+
+interface jsonPathCol {
   jsonPath: string;
+  name: string;
 }
 
 export async function aksKubectlGetPodsCommands(
@@ -41,7 +49,7 @@ export async function aksKubectlGetPodsCommands(
     _context,
     target,
     command,
-    getGridWebviewGetter([
+    getTableWebviewGetter(jsonPathTableGetter([
       { jsonPath: "$.items[*].metadata.name", name: "Name" },
       {
         jsonPath: "$.items[*].status.containerStatuses[0].state",
@@ -51,7 +59,7 @@ export async function aksKubectlGetPodsCommands(
         jsonPath: "$.items[*].status.containerStatuses[0].restartCount",
         name: "Restarts",
       },
-    ])
+    ]))
   );
 }
 
@@ -75,19 +83,19 @@ export async function aksKubectlGetNodeCommands(
   _context: IActionContext,
   target: any
 ): Promise<void> {
-  const command = `get node`;
+  const command = `get node -o json`;
   await aksKubectlCommands(
     _context,
     target,
     command,
-    getGridWebviewGetter([
+    getTableWebviewGetter(jsonPathTableGetter([
       { jsonPath: "$.items[*].metadata.name", name: "Name" },
       { jsonPath: "$.items[*].status.conditions[-1:].type", name: "Status" },
       {
         jsonPath: "$.items[*].status.nodeInfo.kubeletVersion",
         name: "Version",
       },
-    ])
+    ]))
   );
 }
 
@@ -205,7 +213,27 @@ function getBasicWebviewContent(
   return getRenderedContent(templateUri, data);
 }
 
-function getGridWebviewGetter(cols: IColumn[]): IWebviewGetter {
+function jsonPathTableGetter(cols: jsonPathCol[]): ITableGetter {
+  return (cmdOutput: string): ITable => {
+    const obj = JSON.parse(cmdOutput);
+    const columns: string[][] = cols.map((col) => {
+      return JSONPath({ path: col.jsonPath, json: obj });
+    });
+    const table: [][] = [];
+    for (let row = 0; row < columns[0]?.length; row++) {
+      const rowObj: any = {};
+      for (let col = 0; col < columns?.length; col++) {
+        rowObj[cols[col].name] = JSON.stringify(columns[col][row]);
+      }
+      table.push(rowObj);
+    }
+    const headers = cols.map((col) => col.name);
+
+    return {table, headers};
+  };
+}
+
+function getTableWebviewGetter(tableGetter: ITableGetter): IWebviewGetter {
   return (
     cmdOutput: string,
     commandRun: string,
@@ -225,24 +253,11 @@ function getGridWebviewGetter(cols: IColumn[]): IWebviewGetter {
       "akskubectlcommandtable.html"
     );
 
-    const obj = JSON.parse(cmdOutput);
-    const columns: string[][] = cols.map((col) => {
-      return JSONPath({ path: col.jsonPath, json: obj });
-    });
-    const table = [];
-    for (let row = 0; row < columns[0]?.length; row++) {
-      const rowObj: any = {};
-      for (let col = 0; col < columns?.length; col++) {
-        rowObj[cols[col].name] = JSON.stringify(columns[col][row]);
-      }
-      table.push(rowObj);
-    }
-    const tableHeaders = cols.map((col) => col.name);
-
+    const {table, headers} = tableGetter(cmdOutput);
     const data = {
       name: commandRun,
-      table: table,
-      headers: tableHeaders,
+      table,
+      headers,
       toolkituri: toolkitUri,
     };
     return getRenderedContent(templateUri, data);

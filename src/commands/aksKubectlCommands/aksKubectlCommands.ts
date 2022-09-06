@@ -127,7 +127,8 @@ export async function aksKubectlGetPodsCommands(
           ),
           name: "Age",
         },
-      ])
+      ]),
+      "kubectl get pods --all-namespaces"
     )
   );
 }
@@ -170,7 +171,8 @@ export async function aksKubectlGetNodeCommands(
           ),
           name: "Version",
         },
-      ])
+      ]),
+      "kubectl get node"
     )
   );
 }
@@ -325,7 +327,10 @@ function jsonPathTableGetter(cols: ICol[]): ITableGetter {
   };
 }
 
-function getTableWebviewGetter(tableGetter: ITableGetter): IWebviewGetter {
+function getTableWebviewGetter(
+  tableGetter: ITableGetter,
+  title: string
+): IWebviewGetter {
   return (
     cmdOutput: string,
     commandRun: string,
@@ -347,7 +352,7 @@ function getTableWebviewGetter(tableGetter: ITableGetter): IWebviewGetter {
 
     const { table, headers } = tableGetter(cmdOutput);
     const data = {
-      name: commandRun,
+      name: title,
       table,
       headers,
       toolkituri: toolkitUri,
